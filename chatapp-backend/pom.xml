@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  pom.xml  —  Project Object Model                                ║
+  ║                                                                  ║
+  ║  Think of this file like a SHOPPING LIST for your project.       ║
+  ║  You write down all the "libraries" (tools) you need, and Maven  ║
+  ║  automatically downloads them from the internet for you.         ║
+  ║                                                                  ║
+  ║  Maven = a build tool that manages dependencies & compiles code  ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      PARENT — Spring Boot's parent pom gives us sensible defaults
+      and manages dependency versions so we don't have to worry about
+      which version of each library is compatible with which.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.5</version>
+        <relativePath/>
+    </parent>
+
+    <!-- Who owns this project and what is it called? -->
+    <groupId>com.chatapp</groupId>
+    <artifactId>chatapp-backend</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>chatapp-backend</name>
+    <description>Chat Application Backend — Registration and Login APIs</description>
+
+    <!-- We need Java 17 (a recent, stable version) -->
+    <properties>
+        <!--
+          We target Java 17 bytecode (LTS, what Spring Boot 3.x expects),
+          but we compile with Java 25 (what's installed on this machine).
+          The 'release' flag in the compiler plugin enforces this.
+        -->
+        <java.version>17</java.version>
+    </properties>
+
+    <!--
+      ┌─────────────────────────────────────────────────────────┐
+      │  DEPENDENCIES — the libraries we need                   │
+      │  Each <dependency> = one tool/library                   │
+      └─────────────────────────────────────────────────────────┘
+    -->
+    <dependencies>
+
+        <!--
+          1. SPRING WEB
+             Lets us create REST API endpoints (like /api/auth/register).
+             Without this, our app has no HTTP capabilities.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!--
+          2. SPRING DATA MONGODB
+             Lets us talk to MongoDB easily.
+             We write Java — Spring translates it to MongoDB queries automatically.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-mongodb</artifactId>
+        </dependency>
+
+        <!--
+          3. SPRING SECURITY
+             We mainly use this for ONE thing: BCryptPasswordEncoder.
+             BCrypt is a super-safe way to hash (scramble) passwords.
+             We also use it to control which API endpoints are public vs protected.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!--
+          4. SPRING VALIDATION
+             Lets us add rules to incoming data using simple annotations like:
+             @NotBlank, @Email, @Size(min=6)
+             So we don't have to write manual if-else checks everywhere.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!--
+          5. JWT (JSON Web Token) — 3 parts needed together
+             JWT is like a "hall pass" — after you log in, the server gives you
+             a token (a long string). You send this token with every future request
+             so the server knows who you are WITHOUT checking the database each time.
+
+             Think of it like: you log into Gmail → Gmail gives you a cookie/session
+             so you don't have to enter password every 5 minutes.
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>0.12.3</version>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>0.12.3</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          7. DEV TOOLS
+             Auto-restarts the Spring Boot app when you change code.
+             Saves you from manually stopping and starting the server.
+             Only used during development, not in production.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- 8. TEST — for writing unit tests (we'll skip for now) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- Build configuration — tells Maven how to package the app -->
+    <build>
+        <plugins>
+            <!--
+              Set release=17 so the Java 25 compiler produces bytecode
+              compatible with Java 17 (what Spring Boot 3.x targets).
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>17</release>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

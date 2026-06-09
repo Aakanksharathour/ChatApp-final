@@ -1,0 +1,26 @@
+# ── Frontend (React / Vite) ──────────────────────────────────────
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+
+# ── Backend (Spring Boot / Maven) ────────────────────────────────
+chatapp-backend/target/
+chatapp-backend/.mvn/
+!chatapp-backend/.mvn/wrapper/maven-wrapper.jar
+!chatapp-backend/.mvn/wrapper/maven-wrapper.properties
+
+# ── IDE / Editor ──────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.suo
+*.user
+
+# ── OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── PDF docs (optional — remove these lines if you want to commit them) ──
+# *.pdf
