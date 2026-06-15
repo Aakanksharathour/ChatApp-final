@@ -2,6 +2,7 @@ package com.chatapp.controller;
 
 import com.chatapp.dto.ChatResponse;
 import com.chatapp.dto.CreateChatRequest;
+import com.chatapp.dto.SearchResult;
 import com.chatapp.service.ChatService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,61 @@ public class ChatController {
 
     public ChatController(ChatService chatService) {
         this.chatService = chatService;
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  GET /api/chats/search?q=  —  Search chats
+    // ════════════════════════════════════════════════════════════
+
+    /**
+     * SEARCH CONVERSATIONS
+     *
+     * URL:  GET http://localhost:8080/api/chats/search?q=alice
+     *       GET http://localhost:8080/api/chats/search?q=hello&limit=10
+     * Auth: Required
+     *
+     * Searches by contact name OR last message text (case-insensitive).
+     * Minimum 2 characters required.
+     *
+     * SUCCESS RESPONSE (200 OK):
+     * {
+     *   "results": [
+     *     {
+     *       "chatId":              "64abc456...",
+     *       "contactName":         "Alice Johnson",
+     *       "contactProfilePhoto": null,
+     *       "matchedMessage":      "Hey, how are you?",
+     *       "timestamp":           "2026-05-31T10:30:00"
+     *     }
+     *   ]
+     * }
+     *
+     * NOTE: Returns empty array [] when nothing matches — NOT a 404.
+     * This follows the API doc spec exactly.
+     *
+     * WHY @GetMapping("/search") doesn't conflict with @GetMapping("/{chatId}"):
+     * ─────────────────────────────────────────────────────────────────────────
+     * Spring MVC gives priority to LITERAL paths over TEMPLATE paths.
+     * So /api/chats/search is matched as the literal "/search" endpoint,
+     * NOT as /{chatId} = "search". Spring is smart enough to figure this out.
+     *
+     * @param q     the search keyword (required, minimum 2 chars)
+     * @param limit max results (optional, default 20)
+     */
+    @GetMapping("/search")
+    public ResponseEntity<Map<String, Object>> searchChats(
+            @RequestParam String q,
+            @RequestParam(defaultValue = "20") int limit,
+            Authentication authentication) {
+
+        String requesterId = authentication.getName();
+
+        List<SearchResult> results = chatService.searchChats(requesterId, q, limit);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("results", results);
+
+        return ResponseEntity.ok(response);   // 200 OK (even if results is empty)
     }
 
     // ════════════════════════════════════════════════════════════

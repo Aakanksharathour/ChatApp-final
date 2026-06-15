@@ -38,8 +38,7 @@ export default function SignupPage() {
     }
 
     setLoading(true)
-    await new Promise(r => setTimeout(r, 700))
-    const result = signup(name.trim(), email.trim().toLowerCase(), password)
+    const result = await signup(name.trim(), email.trim().toLowerCase(), password)
     setLoading(false)
 
     if (result.ok) {
@@ -52,7 +51,6 @@ export default function SignupPage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        {/* Brand */}
         <div className="auth-brand">
           <div className="auth-brand-icon">💬</div>
           <span className="auth-brand-name">ChatApp</span>

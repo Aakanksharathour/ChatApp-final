@@ -1,107 +1,267 @@
-import { useState, useEffect, useCallback } from 'react'
-import { useNavigate }   from 'react-router-dom'
-import { useAuth }       from '../context/AuthContext'
-import Avatar            from '../components/Avatar'
-import ChatView          from '../components/ChatView'
-import {
-  CONTACTS,
-  INITIAL_CONVERSATIONS,
-  AUTO_REPLIES,
-  formatConvTime,
-} from '../data/mockData'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate }    from 'react-router-dom'
+import { useAuth }        from '../context/AuthContext'
+import { api, getToken }  from '../api/client'
+import Avatar             from '../components/Avatar'
+import ChatView           from '../components/ChatView'
+import { formatConvTime } from '../data/mockData'
 
-/* Deep-clone initial data once on module load */
-function cloneConvs() {
-  return INITIAL_CONVERSATIONS.map(c => ({
-    ...c,
-    messages: c.messages.map(m => ({ ...m, ts: new Date(m.ts) })),
-  }))
+/* Convert backend message to ChatView format */
+function convertMessage(msg, myId) {
+  return {
+    id:   msg.messageId,
+    from: msg.senderId === myId ? 'me' : msg.senderId,
+    text: msg.text,
+    ts:   new Date(msg.timestamp),
+  }
 }
 
 export default function ChatListPage() {
-  const { user }      = useAuth()
+  const { user, logout } = useAuth()
   const navigate      = useNavigate()
-  const [convs,       setConvs]       = useState(() => cloneConvs())
-  const [activeId,    setActiveId]    = useState(null)   // selected conv id
-  const [query,       setQuery]       = useState('')
-  const [isTyping,    setIsTyping]    = useState(false)  // contact typing indicator
-  const isMobile      = typeof window !== 'undefined' && window.innerWidth <= 768
 
-  /* Helper: find contact by id */
-  const contactOf = (cid) => CONTACTS.find(c => c.id === cid) || null
+  const [chats,         setChats]         = useState([])
+  const [activeChatId,  setActiveChatId]  = useState(null)
+  const [messages,      setMessages]      = useState([])
+  const [loadingChats,  setLoadingChats]  = useState(true)
+  const [loadingMsgs,   setLoadingMsgs]   = useState(false)
+  const [onlineUsers,   setOnlineUsers]   = useState(new Set())
+  const [query,         setQuery]         = useState('')
+  const [showNewChat,    setShowNewChat]    = useState(false)
+  const [userSearch,     setUserSearch]     = useState('')
+  const [userResults,    setUserResults]    = useState([])
+  const [searchingUsers, setSearchingUsers] = useState(false)
+  const [searchError,    setSearchError]    = useState('')
+  const [sidebarUsers,   setSidebarUsers]   = useState([])
+  const [searchingSidebar, setSearchingSidebar] = useState(false)
 
-  /* Selected conversation object */
-  const activeConv = convs.find(c => c.id === activeId) || null
-  const activeContact = activeConv ? contactOf(activeConv.contactId) : null
+  const wsRef           = useRef(null)
+  const activeChatIdRef = useRef(null)
+  const isMobile        = typeof window !== 'undefined' && window.innerWidth <= 768
 
-  /* Mark conversation as read when opened */
-  function selectConv(id) {
-    setActiveId(id)
-    setConvs(prev =>
-      prev.map(c => (c.id === id ? { ...c, unread: 0 } : c))
-    )
+  /* Keep ref in sync with state for use inside WS callback */
+  useEffect(() => { activeChatIdRef.current = activeChatId }, [activeChatId])
+
+  /* ── Load chats on mount ── */
+  useEffect(() => {
+    fetchChats()
+    connectWS()
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.onclose = null   // prevent reconnect on intentional close
+        wsRef.current.close()
+      }
+    }
+  }, [])
+
+  async function fetchChats() {
+    try {
+      const data = await api.get('/api/chats')
+      setChats(data.chats || [])
+    } catch (err) {
+      console.error('Failed to load chats:', err)
+    } finally {
+      setLoadingChats(false)
+    }
   }
 
-  /* Send a message */
-  const handleSend = useCallback((text) => {
-    if (!activeId) return
-    const newMsg = { id: `m_${Date.now()}`, from: 'me', text, ts: new Date() }
-    setConvs(prev =>
-      prev.map(c =>
-        c.id === activeId
-          ? { ...c, messages: [...c.messages, newMsg] }
-          : c
-      )
-    )
+  /* ── WebSocket connection ── */
+  function connectWS() {
+    const token = getToken()
+    if (!token) return
 
-    /* Simulate auto-reply */
-    setIsTyping(true)
-    const delay = 1000 + Math.random() * 1200
-    setTimeout(() => {
-      setIsTyping(false)
-      const reply = {
-        id:   `m_${Date.now()}`,
-        from: activeConv.contactId,
-        text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
-        ts:   new Date(),
+    const ws = new WebSocket(`ws://localhost:8080/ws/chat?token=${token}`)
+    wsRef.current = ws
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        if (data.type === 'new_message') {
+          const { chatId, message } = data
+
+          /* Add to messages list if this chat is open AND sender is not me */
+          if (chatId === activeChatIdRef.current && message.senderId !== user.id) {
+            setMessages(prev => [...prev, convertMessage(message, user.id)])
+          }
+
+          /* Update chat list preview + unread count */
+          setChats(prev => prev.map(c =>
+            c.chatId === chatId
+              ? {
+                  ...c,
+                  lastMessageText:     message.text,
+                  lastMessageSenderId: message.senderId,
+                  lastMessageTime:     message.timestamp,
+                  unreadCount:
+                    chatId === activeChatIdRef.current
+                      ? 0
+                      : (c.unreadCount || 0) + 1,
+                }
+              : c
+          ))
+        } else if (data.type === 'user_online') {
+          setOnlineUsers(prev => new Set([...prev, data.userId]))
+        } else if (data.type === 'user_offline') {
+          setOnlineUsers(prev => { const s = new Set(prev); s.delete(data.userId); return s })
+        }
+      } catch {}
+    }
+
+    ws.onclose = () => {
+      /* Auto-reconnect after 3 s if not intentionally closed */
+      if (wsRef.current === ws) {
+        setTimeout(connectWS, 3000)
       }
-      setConvs(prev =>
-        prev.map(c =>
-          c.id === activeId
-            ? { ...c, messages: [...c.messages, reply] }
-            : c
-        )
+    }
+
+    ws.onerror = () => {}
+  }
+
+  /* ── Select & open a chat ── */
+  async function selectChat(chatId) {
+    setActiveChatId(chatId)
+    setMessages([])
+    setLoadingMsgs(true)
+
+    /* Reset unread count optimistically */
+    setChats(prev => prev.map(c => c.chatId === chatId ? { ...c, unreadCount: 0 } : c))
+
+    try {
+      const data = await api.get(`/api/chats/${chatId}/messages`)
+      setMessages((data.messages || []).map(m => convertMessage(m, user.id)))
+    } catch (err) {
+      console.error('Failed to load messages:', err)
+    } finally {
+      setLoadingMsgs(false)
+    }
+  }
+
+  /* ── Send a message ── */
+  const handleSend = useCallback(async (text) => {
+    if (!activeChatId || !text.trim()) return
+    try {
+      const data = await api.post(`/api/chats/${activeChatId}/messages`, { text })
+      const msg = convertMessage(data.message, user.id)
+      setMessages(prev => [...prev, msg])
+      setChats(prev => prev.map(c =>
+        c.chatId === activeChatId
+          ? {
+              ...c,
+              lastMessageText:     text,
+              lastMessageSenderId: user.id,
+              lastMessageTime:     new Date().toISOString(),
+            }
+          : c
+      ))
+    } catch (err) {
+      alert('Failed to send message: ' + err.message)
+    }
+  }, [activeChatId, user.id])
+
+  /* ── Send a file ── */
+  const handleSendFile = useCallback(async (file) => {
+    if (!activeChatId) return
+    if (file.size > 10 * 1024 * 1024) { alert('File size must be under 10 MB.'); return }
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const upload = await api.upload('/api/upload', fd)
+      await handleSend(upload.url)
+    } catch (err) {
+      alert('Upload failed: ' + err.message)
+    }
+  }, [activeChatId, handleSend])
+
+  /* ── Sidebar search: also search users when query is active ── */
+  useEffect(() => {
+    if (!query.trim()) { setSidebarUsers([]); return }
+    const timer = setTimeout(async () => {
+      setSearchingSidebar(true)
+      try {
+        const results = await api.get(`/api/users/search?q=${encodeURIComponent(query)}`)
+        setSidebarUsers(Array.isArray(results) ? results : [])
+      } catch {
+        setSidebarUsers([])
+      } finally {
+        setSearchingSidebar(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  /* ── Modal search for new chat ── */
+  useEffect(() => {
+    if (!showNewChat || !userSearch.trim()) {
+      setUserResults([])
+      setSearchError('')
+      return
+    }
+    const timer = setTimeout(async () => {
+      setSearchingUsers(true)
+      setSearchError('')
+      try {
+        const results = await api.get(`/api/users/search?q=${encodeURIComponent(userSearch)}`)
+        setUserResults(Array.isArray(results) ? results : [])
+      } catch (err) {
+        setSearchError(err.message || 'Search failed')
+        setUserResults([])
+      } finally {
+        setSearchingUsers(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [userSearch, showNewChat])
+
+  /* ── Start a new chat ── */
+  function closeNewChat() {
+    setShowNewChat(false)
+    setUserSearch('')
+    setUserResults([])
+    setSearchError('')
+  }
+
+  async function startChat(participantId) {
+    closeNewChat()
+    try {
+      const data = await api.post('/api/chats', { participantId })
+      const chat = data.chat
+      setChats(prev =>
+        prev.find(c => c.chatId === chat.chatId)
+          ? prev
+          : [chat, ...prev]
       )
-    }, delay)
-  }, [activeId, activeConv])
+      await selectChat(chat.chatId)
+    } catch (err) {
+      alert('Failed to start chat: ' + err.message)
+    }
+  }
 
-  /* Filter conversations by search query */
-  const filtered = convs.filter(c => {
+  /* ── Derived data ── */
+  const activeChat = chats.find(c => c.chatId === activeChatId) || null
+
+  const filteredChats = chats.filter(c => {
     if (!query.trim()) return true
-    const contact = contactOf(c.contactId)
-    const nameMatch = contact?.name.toLowerCase().includes(query.toLowerCase())
-    const lastMsg   = c.messages.at(-1)?.text?.toLowerCase() || ''
-    const msgMatch  = lastMsg.includes(query.toLowerCase())
-    return nameMatch || msgMatch
+    const q = query.toLowerCase()
+    return (
+      c.contactName?.toLowerCase().includes(q) ||
+      c.lastMessageText?.toLowerCase().includes(q)
+    )
   })
 
-  /* Sort by last message time (newest first) */
-  const sorted = [...filtered].sort((a, b) => {
-    const ta = a.messages.at(-1)?.ts || 0
-    const tb = b.messages.at(-1)?.ts || 0
-    return new Date(tb) - new Date(ta)
-  })
+  const sortedChats = [...filteredChats].sort((a, b) =>
+    new Date(b.lastMessageTime || b.updatedAt || 0) -
+    new Date(a.lastMessageTime || a.updatedAt || 0)
+  )
 
-  /* Show chat main when a conv is selected on desktop;
-     hide sidebar on mobile when chat is open */
-  const showSidebar = !isMobile || !activeId
-  const showChat    = !!activeId
+  const showSidebar = !isMobile || !activeChatId
+  const showChat    = !!activeChatId
 
   return (
     <div className="app-layout">
+
       {/* ── Sidebar ── */}
       <div className={`sidebar ${!showSidebar ? 'mob-hidden' : ''}`}>
-        {/* Header */}
         <div className="sidebar-hd">
           <div className="sidebar-brand">
             <span>💬 ChatApp</span>
@@ -109,22 +269,36 @@ export default function ChatListPage() {
           <div className="sidebar-actions">
             <button
               className="icon-btn icon-btn-light"
+              onClick={() => setShowNewChat(true)}
+              title="New chat"
+            >
+              ✏️
+            </button>
+            <button
+              className="icon-btn icon-btn-light"
               onClick={() => navigate('/profile')}
               title="Profile"
             >
               👤
             </button>
+            <button
+              className="icon-btn icon-btn-light"
+              onClick={() => { logout(); navigate('/login') }}
+              title="Sign out"
+            >
+              🚪
+            </button>
           </div>
         </div>
 
-        {/* Search */}
+        {/* Chat search */}
         <div className="search-bar">
           <div className="search-wrap">
             <span className="s-icon">🔍</span>
             <input
               type="search"
               className="search-input"
-              placeholder="Search conversations…"
+              placeholder="Search chats or people…"
               value={query}
               onChange={e => setQuery(e.target.value)}
             />
@@ -133,70 +307,124 @@ export default function ChatListPage() {
 
         {/* Conversation list */}
         <div className="conv-list">
-          {sorted.length === 0 ? (
-            <div className="conv-empty">
-              <div className="conv-empty-icon">🔍</div>
-              <p>No conversations found</p>
-            </div>
+          {loadingChats ? (
+            <div className="conv-empty"><p>Loading chats…</p></div>
           ) : (
-            sorted.map(conv => {
-              const contact = contactOf(conv.contactId)
-              if (!contact) return null
-              const lastMsg = conv.messages.at(-1)
-              const preview = lastMsg
-                ? (lastMsg.from === 'me' ? `You: ${lastMsg.text}` : lastMsg.text)
-                : 'No messages yet'
-              const ts = lastMsg?.ts
+            <>
+              {/* Existing conversations */}
+              {sortedChats.length === 0 && !query && (
+                <div className="conv-empty">
+                  <div className="conv-empty-icon">💬</div>
+                  <p>No chats yet</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
+                    Use 🔍 above to find people
+                  </p>
+                </div>
+              )}
 
-              return (
-                <div
-                  key={conv.id}
-                  className={`conv-item ${conv.id === activeId ? 'is-active' : ''}`}
-                  onClick={() => selectConv(conv.id)}
-                >
-                  <Avatar name={contact.name} size={48} online={contact.online} />
+              {sortedChats.map(chat => {
+                const isActive = chat.chatId === activeChatId
+                const isOnline = onlineUsers.has(chat.contactId)
+                const lastTime = chat.lastMessageTime || chat.updatedAt
+                const preview  = chat.lastMessageText
+                  ? (chat.lastMessageSenderId === user.id
+                      ? `You: ${chat.lastMessageText}`
+                      : chat.lastMessageText)
+                  : 'No messages yet'
 
-                  <div className="conv-body">
-                    <div className="conv-row1">
-                      <span className="conv-name">{contact.name}</span>
-                      {ts && (
-                        <span className={`conv-ts ${conv.unread > 0 ? 'has-unread' : ''}`}>
-                          {formatConvTime(ts)}
+                return (
+                  <div
+                    key={chat.chatId}
+                    className={`conv-item ${isActive ? 'is-active' : ''}`}
+                    onClick={() => selectChat(chat.chatId)}
+                  >
+                    <Avatar name={chat.contactName || '?'} size={48} online={isOnline} />
+                    <div className="conv-body">
+                      <div className="conv-row1">
+                        <span className="conv-name">{chat.contactName}</span>
+                        {lastTime && (
+                          <span className={`conv-ts ${chat.unreadCount > 0 ? 'has-unread' : ''}`}>
+                            {formatConvTime(lastTime)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="conv-row2">
+                        <span className={`conv-last ${chat.unreadCount > 0 ? 'has-unread' : ''}`}>
+                          {preview}
                         </span>
-                      )}
-                    </div>
-                    <div className="conv-row2">
-                      <span className={`conv-last ${conv.unread > 0 ? 'has-unread' : ''}`}>
-                        {preview}
-                      </span>
-                      {conv.unread > 0 && (
-                        <span className="unread-badge">{conv.unread}</span>
-                      )}
+                        {chat.unreadCount > 0 && (
+                          <span className="unread-badge">{chat.unreadCount}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })
+                )
+              })}
+
+              {/* People section — shows when searching */}
+              {query.trim() && (
+                <>
+                  <div style={{ padding: '8px 16px 4px', fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderTop: sortedChats.length ? '1px solid var(--border)' : 'none' }}>
+                    People
+                  </div>
+                  {searchingSidebar && (
+                    <div style={{ padding: '8px 16px', color: 'var(--text-3)', fontSize: 13 }}>Searching…</div>
+                  )}
+                  {!searchingSidebar && sidebarUsers.length === 0 && (
+                    <div style={{ padding: '8px 16px', color: 'var(--text-3)', fontSize: 13 }}>No people found</div>
+                  )}
+                  {sidebarUsers.map(u => (
+                    <div
+                      key={u.id}
+                      className="conv-item"
+                      onClick={() => startChat(u.id)}
+                    >
+                      <Avatar name={u.name} size={48} />
+                      <div className="conv-body">
+                        <div className="conv-row1">
+                          <span className="conv-name">{u.name}</span>
+                        </div>
+                        <div className="conv-row2">
+                          <span className="conv-last">{u.email}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
 
       {/* ── Chat main ── */}
       <div className={`chat-main ${!showChat ? 'mob-hidden' : ''}`}>
-        {showChat && activeContact ? (
-          <ChatView
-            contact={activeContact}
-            messages={activeConv.messages}
-            onSend={handleSend}
-            onBack={isMobile ? () => setActiveId(null) : undefined}
-            isTyping={isTyping}
-          />
+        {showChat && activeChat ? (
+          loadingMsgs ? (
+            <div className="welcome-screen">
+              <p>Loading messages…</p>
+            </div>
+          ) : (
+            <ChatView
+              contact={{
+                id:     activeChat.contactId,
+                name:   activeChat.contactName,
+                photo:  activeChat.contactProfilePhoto,
+                online: onlineUsers.has(activeChat.contactId),
+              }}
+              messages={messages}
+              onSend={handleSend}
+              onSendFile={handleSendFile}
+              onBack={isMobile ? () => setActiveChatId(null) : undefined}
+              isTyping={false}
+            />
+          )
         ) : (
           <div className="welcome-screen">
             <div className="welcome-icon">💬</div>
             <h2 className="welcome-title">ChatApp</h2>
             <p className="welcome-body">
-              Select a conversation from the sidebar to start chatting.
+              Select a conversation or start a new one.
             </p>
             <div className="welcome-secure">
               🔒 Your messages are end-to-end encrypted
@@ -204,6 +432,55 @@ export default function ChatListPage() {
           </div>
         )}
       </div>
+
+      {/* ── New Chat Modal ── */}
+      {showNewChat && (
+        <div className="modal-backdrop" onClick={closeNewChat}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-hd">
+              <span>New Chat</span>
+              <button className="icon-btn icon-btn-light" onClick={closeNewChat}>✕</button>
+            </div>
+            <div className="search-bar" style={{ padding: '8px 12px' }}>
+              <div className="search-wrap">
+                <span className="s-icon">🔍</span>
+                <input
+                  type="search"
+                  className="search-input"
+                  placeholder="Search by name or email…"
+                  value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {searchingUsers && (
+                <p style={{ padding: '12px 16px', color: '#666', margin: 0 }}>Searching…</p>
+              )}
+              {searchError && (
+                <p style={{ padding: '12px 16px', color: '#c00', margin: 0 }}>{searchError}</p>
+              )}
+              {!searchingUsers && !searchError && userSearch && userResults.length === 0 && (
+                <p style={{ padding: '12px 16px', color: '#666', margin: 0 }}>No users found</p>
+              )}
+              {userResults.map(u => (
+                <div
+                  key={u.id}
+                  style={{ display:'flex', alignItems:'center', padding:'12px 16px', gap:12, cursor:'pointer', borderBottom:'1px solid #eee' }}
+                  onClick={() => startChat(u.id)}
+                >
+                  <Avatar name={u.name} size={40} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{u.name}</div>
+                    <div style={{ fontSize: 13, color: '#666' }}>{u.email}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

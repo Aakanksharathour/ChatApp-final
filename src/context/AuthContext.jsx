@@ -1,79 +1,76 @@
 import { createContext, useContext, useState } from 'react'
+import { api, setToken, clearToken } from '../api/client'
 
 const AuthContext = createContext(null)
 
 const SESSION_KEY = 'chatapp_session'
-const USERS_KEY   = 'chatapp_users'
 
-/* Seed users always available — not stored in localStorage */
-const SEED_USERS = [
-  { id: 'seed_1', name: 'Demo User',  email: 'demo@example.com',  password: 'demo123'  },
-  { id: 'seed_2', name: 'Alice Johnson', email: 'alice@example.com', password: 'alice123' },
-  { id: 'seed_3', name: 'Bob Martinez',  email: 'bob@example.com',   password: 'bob123'   },
-]
-
-function loadUsers() {
+function isTokenExpired(token) {
   try {
-    const stored = JSON.parse(localStorage.getItem(USERS_KEY) || '[]')
-    const seedEmails = new Set(SEED_USERS.map(u => u.email))
-    const extra = stored.filter(u => !seedEmails.has(u.email))
-    return [...SEED_USERS, ...extra]
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp * 1000 < Date.now()
   } catch {
-    return [...SEED_USERS]
+    return true
   }
-}
-
-function persistUsers(users) {
-  const seedEmails = new Set(SEED_USERS.map(u => u.email))
-  const extra = users.filter(u => !seedEmails.has(u.email))
-  localStorage.setItem(USERS_KEY, JSON.stringify(extra))
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     try {
-      const s = localStorage.getItem(SESSION_KEY)
-      return s ? JSON.parse(s) : null
+      const s     = localStorage.getItem(SESSION_KEY)
+      const token = localStorage.getItem('chatapp_token')
+      if (!s || !token || isTokenExpired(token)) {
+        localStorage.removeItem(SESSION_KEY)
+        localStorage.removeItem('chatapp_token')
+        return null
+      }
+      return JSON.parse(s)
     } catch {
       return null
     }
   })
 
-  function login(email, password) {
-    const users = loadUsers()
-    const found = users.find(
-      u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-    )
-    if (!found) return { ok: false, error: 'Incorrect email or password. Please try again.' }
-
-    const session = { id: found.id, name: found.name, email: found.email }
-    setUser(session)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session))
-    return { ok: true }
+  async function login(email, password) {
+    try {
+      const data = await api.post('/api/auth/login', { email, password })
+      setToken(data.token)
+      const session = { id: data.userId, name: data.name, email: data.email, photo: null }
+      setUser(session)
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
   }
 
-  function signup(name, email, password) {
-    const users = loadUsers()
-    if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-      return { ok: false, error: 'An account with this email already exists.' }
+  async function signup(name, email, password) {
+    try {
+      await api.post('/api/auth/register', { name, email, password, confirmPassword: password })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err.message }
     }
-    const newUser = { id: `u_${Date.now()}`, name, email, password }
-    persistUsers([...users, newUser])
-    return { ok: true }
   }
 
   function logout() {
     setUser(null)
+    clearToken()
     localStorage.removeItem(SESSION_KEY)
   }
 
-  function updateProfile(data) {
-    const updated = { ...user, ...data }
-    setUser(updated)
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updated))
-
-    const users = loadUsers()
-    persistUsers(users.map(u => (u.id === updated.id ? { ...u, ...data } : u)))
+  async function updateProfile(data) {
+    try {
+      const updated = await api.put('/api/users/me', {
+        name: data.name || undefined,
+        profilePhoto: data.photo || data.profilePhoto || undefined,
+      })
+      const session = { ...user, name: updated.name, photo: updated.profilePhoto }
+      setUser(session)
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err.message }
+    }
   }
 
   return (

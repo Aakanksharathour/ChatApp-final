@@ -28,8 +28,7 @@ export default function LoginPage() {
     }
 
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
-    const result = login(email.trim(), password)
+    const result = await login(email.trim(), password)
     setLoading(false)
 
     if (result.ok) {
@@ -42,7 +41,6 @@ export default function LoginPage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        {/* Brand */}
         <div className="auth-brand">
           <div className="auth-brand-icon">💬</div>
           <span className="auth-brand-name">ChatApp</span>
@@ -92,11 +90,6 @@ export default function LoginPage() {
           Don't have an account?{' '}
           <Link to="/signup">Create one</Link>
         </p>
-
-        <div className="auth-demo">
-          <strong>Demo credentials</strong><br />
-          Email: <strong>demo@example.com</strong> &nbsp;/&nbsp; Password: <strong>demo123</strong>
-        </div>
       </div>
     </div>
   )

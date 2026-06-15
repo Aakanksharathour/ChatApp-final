@@ -22,5 +22,11 @@ chatapp-backend/.mvn/
 .DS_Store
 Thumbs.db
 
+# ── Uploaded files ────────────────────────────────────────────────
+chatapp-backend/uploads/
+
+# ── Claude AI settings ────────────────────────────────────────────
+.claude/
+
 # ── PDF docs (optional — remove these lines if you want to commit them) ──
 # *.pdf

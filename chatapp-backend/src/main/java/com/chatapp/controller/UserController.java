@@ -8,6 +8,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,7 +37,7 @@ import java.util.Map;
  *  to send their userId in the request body — the JWT token already has it!
  */
 @RestController
-@RequestMapping("/api/user")
+@RequestMapping("/api/users")
 @CrossOrigin(origins = "http://localhost:5173")
 public class UserController {
 
@@ -77,10 +78,24 @@ public class UserController {
      * → It's different from @RequestBody (which reads JSON body) and
      *   @RequestParam (which reads ?key=value query params).
      */
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileResponse> getMe(Authentication authentication) {
+        UserProfileResponse profile = userService.getUserById(authentication.getName());
+        return ResponseEntity.ok(profile);
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<UserProfileResponse>> searchUsers(
+            @RequestParam String q,
+            Authentication authentication) {
+        List<UserProfileResponse> results = userService.searchUsers(q, authentication.getName());
+        return ResponseEntity.ok(results);
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<UserProfileResponse> getUser(@PathVariable String id) {
         UserProfileResponse profile = userService.getUserById(id);
-        return ResponseEntity.ok(profile);  // 200 OK
+        return ResponseEntity.ok(profile);
     }
 
     // ════════════════════════════════════════════════════════════
@@ -122,6 +137,19 @@ public class UserController {
      * authentication.getName() = userId stored in JWT by JwtAuthFilter.
      * We pass this to the service as "requesterId" for the ownership check.
      */
+    @PutMapping("/me")
+    public ResponseEntity<Map<String, Object>> updateMe(
+            @RequestBody UpdateProfileRequest request,
+            Authentication authentication) {
+        String userId = authentication.getName();
+        UserProfileResponse updated = userService.updateProfile(userId, userId, request);
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", "Profile updated successfully");
+        response.put("user", updated);
+        return ResponseEntity.ok(response);
+    }
+
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> updateProfile(
             @PathVariable String id,

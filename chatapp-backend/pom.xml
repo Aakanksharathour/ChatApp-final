@@ -24,7 +24,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>3.4.5</version>
         <relativePath/>
     </parent>
 
@@ -135,7 +135,19 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- 8. TEST — for writing unit tests (we'll skip for now) -->
+        <!--
+          8. WEBSOCKET
+             Enables real-time two-way communication between browser and server.
+             Unlike normal HTTP (request → response), WebSocket keeps the connection
+             OPEN so the server can PUSH messages to the client instantly.
+             Used for: live chat, typing indicators, online/offline status.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
+        <!-- 9. TEST — for writing unit tests (we'll skip for now) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
@@ -162,6 +174,13 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!--
+                      Java 25 changed default TLS behavior which breaks MongoDB Atlas SSL handshake.
+                      This forces Java to use TLS 1.2 which Atlas supports correctly.
+                    -->
+                    <jvmArguments>-Djdk.tls.client.protocols=TLSv1.2 -Dhttps.protocols=TLSv1.2</jvmArguments>
+                </configuration>
             </plugin>
         </plugins>
     </build>

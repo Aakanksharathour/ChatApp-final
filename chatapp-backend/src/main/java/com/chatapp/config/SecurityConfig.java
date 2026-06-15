@@ -68,8 +68,14 @@ public class SecurityConfig {
                 // PUBLIC: only register and login — no token needed
                 .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
 
+                // WebSocket handshake — auth is handled by WebSocketAuthInterceptor (token in query param)
+                // Spring Security can't intercept the WS upgrade the same way, so we permit here
+                .requestMatchers("/ws/**").permitAll()
+
+                // Uploaded files are served as static resources — no auth needed to view
+                .requestMatchers("/uploads/**").permitAll()
+
                 // EVERYTHING ELSE requires a valid JWT token
-                // Includes: /api/auth/logout, /api/user/**, future /api/chats/**, etc.
                 .anyRequest().authenticated()
             )
 

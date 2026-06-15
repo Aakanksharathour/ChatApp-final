@@ -10,6 +10,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 /**
  * ════════════════════════════════════════════════════════════════
  *  UserService  —  BUSINESS LOGIC for User / Profile APIs
@@ -102,6 +105,16 @@ public class UserService {
      * If they don't match → someone is trying to update someone else's profile!
      * → Throw 403 Forbidden
      */
+    public List<UserProfileResponse> searchUsers(String query, String requesterId) {
+        log.debug("Searching users with query: {}", query);
+        return userRepository
+                .findByNameContainingIgnoreCaseOrEmailContainingIgnoreCase(query, query)
+                .stream()
+                .filter(u -> !u.getId().equals(requesterId))
+                .map(u -> new UserProfileResponse(u.getId(), u.getName(), u.getEmail(), u.getProfilePhoto()))
+                .collect(Collectors.toList());
+    }
+
     public UserProfileResponse updateProfile(String targetId, String requesterId, UpdateProfileRequest request) {
         log.debug("Update request: targetId={}, requesterId={}", targetId, requesterId);
 

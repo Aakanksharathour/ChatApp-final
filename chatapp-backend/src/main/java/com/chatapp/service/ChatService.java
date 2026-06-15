@@ -2,6 +2,7 @@ package com.chatapp.service;
 
 import com.chatapp.dto.ChatResponse;
 import com.chatapp.dto.CreateChatRequest;
+import com.chatapp.dto.SearchResult;
 import com.chatapp.exception.ApiException;
 import com.chatapp.model.Chat;
 import com.chatapp.model.User;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.http.HttpStatus;
 
 /**
  * ════════════════════════════════════════════════════════════════
@@ -207,6 +209,100 @@ public class ChatService {
 
         // ── STEP 3: Return the chat ───────────────────────────────────
         return buildChatResponse(chat, requesterId);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    //  SEARCH CHATS
+    // ════════════════════════════════════════════════════════════
+
+    /**
+     * Searches the logged-in user's chats by contact name OR last message text.
+     *
+     * HOW IT WORKS:
+     * ─────────────────────────────────────────────────────────────
+     * 1. Get ALL chats for the user (same as getAllChats)
+     * 2. For each chat, find the OTHER participant (the contact)
+     * 3. Fetch their name from the users collection
+     * 4. Keep chats where:
+     *    - Contact name contains the search query (case-insensitive)
+     *    - OR last message text contains the search query
+     * 5. Map remaining chats to SearchResult and return
+     *
+     * JAVA CONCEPTS USED:
+     * ─────────────────────────────────────────────────────────────
+     * .stream().filter() → keeps only items matching a condition
+     * .toLowerCase().contains() → case-insensitive substring search
+     *
+     * Example:
+     * User searches "ali"
+     * → "Alice Johnson".toLowerCase() = "alice johnson"
+     * → "alice johnson".contains("ali") = TRUE ✅
+     * → "Bob Smith".toLowerCase() = "bob smith"
+     * → "bob smith".contains("ali") = FALSE ❌
+     *
+     * @param requesterId  the logged-in user's ID
+     * @param query        the search keyword (minimum 2 characters)
+     * @param limit        max results to return
+     */
+    public List<SearchResult> searchChats(String requesterId, String query, int limit) {
+        if (query == null || query.trim().length() < 2) {
+            throw new ApiException(
+                    "Search query must be at least 2 characters.",
+                    HttpStatus.BAD_REQUEST
+            );
+        }
+
+        String lowerQuery = query.toLowerCase().trim();
+        log.debug("Searching chats for userId={} with query='{}'", requesterId, lowerQuery);
+
+        List<Chat> allChats = chatRepository.findByParticipantsContainingOrderByUpdatedAtDesc(requesterId);
+
+        return allChats.stream()
+                .filter(chat -> {
+                    // Find the contact's userId
+                    String contactId = chat.getParticipants().stream()
+                            .filter(id -> !id.equals(requesterId))
+                            .findFirst().orElse(null);
+                    if (contactId == null) return false;
+
+                    User contact = userRepository.findById(contactId).orElse(null);
+
+                    // Match 1: contact name contains the query
+                    boolean nameMatch = contact != null &&
+                            contact.getName().toLowerCase().contains(lowerQuery);
+
+                    // Match 2: last message text contains the query
+                    boolean messageMatch = chat.getLastMessage() != null &&
+                            chat.getLastMessage().getText() != null &&
+                            chat.getLastMessage().getText().toLowerCase().contains(lowerQuery);
+
+                    return nameMatch || messageMatch;
+                })
+                .limit(limit)
+                .map(chat -> {
+                    String contactId = chat.getParticipants().stream()
+                            .filter(id -> !id.equals(requesterId))
+                            .findFirst().orElse(null);
+
+                    User contact = contactId != null
+                            ? userRepository.findById(contactId).orElse(null)
+                            : null;
+
+                    String contactName  = contact != null ? contact.getName() : "Unknown User";
+                    String contactPhoto = contact != null ? contact.getProfilePhoto() : null;
+                    String lastMsg      = chat.getLastMessage() != null
+                            ? chat.getLastMessage().getText()
+                            : null;
+
+                    return new SearchResult(
+                            chat.getId(),
+                            contactName,
+                            contactPhoto,
+                            lastMsg,
+                            chat.getUpdatedAt()
+                    );
+                })
+                .collect(Collectors.toList());
     }
 
     // ════════════════════════════════════════════════════════════

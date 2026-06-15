@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth }     from '../context/AuthContext'
-import Avatar          from '../components/Avatar'
+import { useNavigate }  from 'react-router-dom'
+import { useAuth }      from '../context/AuthContext'
+import { api }          from '../api/client'
+import Avatar           from '../components/Avatar'
 
 export default function ProfilePage() {
   const { user, logout, updateProfile } = useAuth()
@@ -11,14 +12,21 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false)
   const [nameVal,     setNameVal]     = useState(user?.name || '')
   const [saved,       setSaved]       = useState(false)
+  const [saving,      setSaving]      = useState(false)
 
-  function handleSaveName() {
+  async function handleSaveName() {
     const trimmed = nameVal.trim()
     if (!trimmed) return
-    updateProfile({ name: trimmed })
-    setEditingName(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
+    setSaving(true)
+    const result = await updateProfile({ name: trimmed })
+    setSaving(false)
+    if (result.ok) {
+      setEditingName(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } else {
+      alert('Failed to update name: ' + result.error)
+    }
   }
 
   function handleCancelEdit() {
@@ -31,20 +39,31 @@ export default function ProfilePage() {
     navigate('/login')
   }
 
-  /* Avatar photo upload (UI only — stores as data URL in session) */
-  function handlePhotoChange(e) {
+  async function handlePhotoChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) { alert('Photo must be under 5 MB.'); return }
-    const reader = new FileReader()
-    reader.onload = () => updateProfile({ photo: reader.result })
-    reader.readAsDataURL(file)
+
+    setSaving(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const upload = await api.upload('/api/upload', fd)
+      await updateProfile({ photo: upload.url })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      alert('Upload failed: ' + err.message)
+    } finally {
+      setSaving(false)
+    }
     e.target.value = ''
   }
 
+  const photoSrc = user?.photo || user?.profilePhoto || null
+
   return (
     <div className="profile-layout">
-      {/* Header */}
       <div className="profile-hd">
         <button
           className="icon-btn icon-btn-light"
@@ -59,23 +78,22 @@ export default function ProfilePage() {
       <div className="profile-scroll">
         <div className="profile-body">
 
-          {/* Banner with avatar */}
           <div className="profile-banner">
             <div
               className="av-edit-wrap"
-              onClick={() => fileRef.current?.click()}
+              onClick={() => !saving && fileRef.current?.click()}
               title="Change photo"
             >
-              {user?.photo ? (
+              {photoSrc ? (
                 <img
-                  src={user.photo}
+                  src={photoSrc}
                   alt="avatar"
                   style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover' }}
                 />
               ) : (
                 <Avatar name={user?.name || ''} size={96} />
               )}
-              <div className="av-edit-overlay">📷</div>
+              <div className="av-edit-overlay">{saving ? '⏳' : '📷'}</div>
             </div>
             <input
               ref={fileRef}
@@ -90,11 +108,9 @@ export default function ProfilePage() {
 
           {saved && <div className="alert-success">✓ Profile updated successfully.</div>}
 
-          {/* Info card */}
           <div className="info-card">
             <div className="info-card-hd">Account Info</div>
 
-            {/* Name row */}
             <div className="info-row">
               <div className="info-row-left">
                 <div className="info-row-label">Full Name</div>
@@ -115,8 +131,10 @@ export default function ProfilePage() {
               </div>
               {editingName ? (
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-primary btn-sm" onClick={handleSaveName}>Save</button>
-                  <button className="btn btn-ghost   btn-sm" onClick={handleCancelEdit}>Cancel</button>
+                  <button className="btn btn-primary btn-sm" onClick={handleSaveName} disabled={saving}>
+                    {saving ? '…' : 'Save'}
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={handleCancelEdit}>Cancel</button>
                 </div>
               ) : (
                 <button
@@ -128,7 +146,6 @@ export default function ProfilePage() {
               )}
             </div>
 
-            {/* Email row */}
             <div className="info-row">
               <div className="info-row-left">
                 <div className="info-row-label">Email Address</div>
@@ -137,7 +154,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Actions */}
           <div className="profile-actions">
             <button className="btn btn-danger btn-full" onClick={handleLogout}>
               🚪 Sign Out

@@ -21,7 +21,7 @@ function isSameDay(a, b) {
  *   isTyping: boolean,
  * }} props
  */
-export default function ChatView({ contact, messages, onSend, onBack, isTyping }) {
+export default function ChatView({ contact, messages, onSend, onSendFile, onBack, isTyping }) {
   const [text, setText]           = useState('')
   const [showEmoji, setShowEmoji] = useState(false)
   const bottomRef                 = useRef(null)
@@ -57,9 +57,11 @@ export default function ChatView({ contact, messages, onSend, onBack, isTyping }
   function handleFileChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    const tooLarge = file.size > 10 * 1024 * 1024
-    if (tooLarge) { alert('File size must be under 10 MB.'); return }
-    onSend(`📎 ${file.name}`)
+    if (onSendFile) {
+      onSendFile(file)
+    } else {
+      onSend(`📎 ${file.name}`)
+    }
     e.target.value = ''
   }
 

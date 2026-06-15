@@ -838,3 +838,35 @@ img { display: block; max-width: 100%; }
   .chat-main.mob-hidden { display: none; }
   .msg-bubble { max-width: 80%; }
 }
+
+/* ================================================================
+   MODAL — New Chat
+   ================================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-box {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.modal-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  font-weight: 600;
+  font-size: 15px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
