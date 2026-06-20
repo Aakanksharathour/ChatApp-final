@@ -2,6 +2,15 @@
 
 A full-stack real-time chat application built with **React** (frontend) and **Spring Boot** (backend), connected to **MongoDB Atlas** cloud database with **WebSocket** support for instant messaging.
 
+## 🌐 Live Demo
+
+| | URL |
+|---|---|
+| **Frontend** | https://chatapp-final.vercel.app |
+| **Backend API** | https://vigilant-eagerness-production-7277.up.railway.app |
+
+**Test account:** `alice@test.com` / `Test1234!`
+
 ---
 
 ## 📸 Screenshots
