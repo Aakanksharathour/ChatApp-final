@@ -49,7 +49,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
     /** Spring automatically provides (injects) this AuthService instance. */

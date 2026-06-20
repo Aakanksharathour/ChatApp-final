@@ -57,7 +57,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/upload")
-@CrossOrigin(origins = "http://localhost:5173")
 public class UploadController {
 
     private final UploadService uploadService;

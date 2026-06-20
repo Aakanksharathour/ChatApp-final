@@ -39,7 +39,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/chats")
-@CrossOrigin(origins = "http://localhost:5173")
 public class ChatController {
 
     private final ChatService chatService;
