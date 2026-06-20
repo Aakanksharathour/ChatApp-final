@@ -4,12 +4,22 @@ A full-stack real-time chat application built with **React** (frontend) and **Sp
 
 ## 🌐 Live Demo
 
-| | URL |
-|---|---|
-| **Frontend** | https://chatapp-final.vercel.app |
-| **Backend API** | https://vigilant-eagerness-production-7277.up.railway.app |
+| | URL | Platform |
+|---|---|---|
+| **Frontend** | https://chatapp-final.vercel.app | Vercel |
+| **Backend API** | https://vigilant-eagerness-production-7277.up.railway.app | Railway |
+| **Database** | MongoDB Atlas (cloud) | AWS Mumbai |
 
-**Test account:** `alice@test.com` / `Test1234!`
+**Test accounts** (password for all: `Test1234!`):
+
+| Name | Email |
+|---|---|
+| Alice | alice@test.com |
+| Bob | bob@test.com |
+| Priya Sharma | priya@test.com |
+| Rahul Verma | rahul@test.com |
+
+> **Note:** Real-time WebSocket push is available when running locally. On the deployed version, messages are sent and stored via REST API — refresh to see new messages from the other user.
 
 ---
 
@@ -37,17 +47,18 @@ A full-stack real-time chat application built with **React** (frontend) and **Sp
 
 ## ✨ Features
 
-- **User Authentication** — Register & login with JWT tokens (24-hour session)
-- **Real-Time Messaging** — Instant message delivery via WebSocket
-- **User Search** — Search people by name or email directly from the sidebar
-- **Chat Management** — Create new chats, view conversation history
-- **File & Image Upload** — Send images, PDFs and other files (up to 10 MB)
-- **Emoji Picker** — Built-in emoji support in the message input
-- **Online Status** — See who is currently online via WebSocket presence
-- **Unread Badge** — Unread message count per conversation
-- **Profile Editing** — Update name and profile photo
-- **Persistent Storage** — All messages & chats saved to MongoDB Atlas
-- **Mobile Responsive** — Works on both desktop and mobile screens
+| Feature | Local | Deployed |
+|---|---|---|
+| User Registration & Login (JWT) | ✅ | ✅ |
+| Chat List & Message History | ✅ | ✅ |
+| Send & Receive Messages | ✅ | ✅ |
+| Search Users & Start New Chats | ✅ | ✅ |
+| File & Image Upload (10 MB) | ✅ | ✅ |
+| Emoji Picker | ✅ | ✅ |
+| Profile Editing (name & photo) | ✅ | ✅ |
+| Unread Message Badge | ✅ | ✅ |
+| Real-Time Push (WebSocket) | ✅ | ⚠️ Requires paid plan |
+| Online / Offline Status | ✅ | ⚠️ Requires paid plan |
 
 ---
 
@@ -75,6 +86,13 @@ A full-stack real-time chat application built with **React** (frontend) and **Sp
 | Java 17 | Runtime |
 | Maven | Build tool |
 
+### Deployment
+| Service | What it hosts |
+|---|---|
+| Vercel | React frontend |
+| Railway | Spring Boot backend |
+| MongoDB Atlas | Database (M0 free tier) |
+
 ---
 
 ## 📁 Project Structure
@@ -96,8 +114,6 @@ chat App final/
 │   │   ├── SignupPage.jsx           # Registration screen
 │   │   ├── ChatListPage.jsx         # Main chat interface
 │   │   └── ProfilePage.jsx          # User profile editor
-│   ├── data/
-│   │   └── mockData.js              # Date/time helper functions
 │   ├── App.jsx                      # Routes & layout
 │   └── index.css                    # Global styles
 │
@@ -113,12 +129,14 @@ chat App final/
 │       └── util/                    # JWT utility
 │
 ├── 📂 screenshots/                  # App screenshots
+├── .env.production                  # Vercel build config
+├── vercel.json                      # Vercel SPA routing
 └── README.md
 ```
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Running Locally
 
 ### Prerequisites
 
@@ -129,28 +147,14 @@ chat App final/
 | Node.js | 18+ | [nodejs.org](https://nodejs.org/) |
 | MongoDB Atlas | Free tier | [cloud.mongodb.com](https://cloud.mongodb.com/) |
 
----
-
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/chat-app-final.git
-cd "chat App final"
+git clone https://github.com/Aakanksharathour/ChatApp-final.git
+cd "ChatApp-final"
 ```
 
----
-
-### 2. MongoDB Atlas Setup
-
-1. Create a free account at [cloud.mongodb.com](https://cloud.mongodb.com/)
-2. Create a new **Project** and **Cluster** (free M0 tier)
-3. In **Database Access** → Add a new database user with `Atlas Admin` role
-4. In **Network Access** → Add IP `0.0.0.0/0` (allow all)
-5. Click **Connect** → **Drivers** → copy the connection string
-
----
-
-### 3. Configure the Backend
+### 2. Configure the Backend
 
 Edit `chatapp-backend/src/main/resources/application.properties`:
 
@@ -160,11 +164,7 @@ jwt.secret=YOUR_SECRET_KEY_MIN_32_CHARACTERS_LONG
 jwt.expiration=86400000
 ```
 
-Also update `chatapp-backend/src/main/java/com/chatapp/config/MongoConfig.java` line 47 with your connection URI.
-
----
-
-### 4. Run the Backend
+### 3. Run the Backend
 
 ```bash
 cd chatapp-backend
@@ -173,14 +173,12 @@ mvn spring-boot:run
 
 Backend starts at → **http://localhost:8080**
 
----
-
-### 5. Run the Frontend
+### 4. Run the Frontend
 
 Open a new terminal:
 
 ```bash
-cd "chat App final"
+cd "ChatApp-final"
 npm install
 npm run dev
 ```
@@ -227,7 +225,7 @@ Frontend starts at → **http://localhost:5173**
 ### WebSocket
 | Protocol | Endpoint | Description |
 |---|---|---|
-| WS | `/ws/chat?token=JWT` | Real-time messaging connection |
+| WS | `/ws/chat?token=JWT` | Real-time messaging (local only) |
 
 ---
 
@@ -242,34 +240,19 @@ Frontend starts at → **http://localhost:5173**
 
 ---
 
-## 🔐 Environment & Security Notes
+## 🔐 Security Notes
 
 - JWT tokens expire after **24 hours**
 - Passwords are hashed with **BCrypt**
 - All protected routes require `Authorization: Bearer <token>` header
-- CORS is configured for `http://localhost:5173`
+- CORS is configured globally in `SecurityConfig` for both localhost and Vercel
 - File uploads support: `jpg, png, gif, pdf, mp4, mp3, zip` (max 10 MB)
-
----
-
-## 👤 Test Accounts
-
-After running the project, you can register accounts or use these pre-created test accounts (password for all: `Test1234!`):
-
-| Name | Email |
-|---|---|
-| Alice | alice@test.com |
-| Bob | bob@test.com |
-| Priya Sharma | priya@test.com |
-| Rahul Verma | rahul@test.com |
-| Ananya Singh | ananya@test.com |
-| Arjun Patel | arjun@test.com |
 
 ---
 
 ## 🧑‍💻 Author
 
-**Shantanu Rathor**  
+**Shantanu Rathor**
 GitHub: [@Aakanksharathour](https://github.com/Aakanksharathour)
 
 ---
