@@ -5,6 +5,9 @@ dist/
 .env.local
 .env.*.local
 
+# ── Screenshot automation (dev only) ─────────────────────────────
+take-screenshots.cjs
+
 # ── Backend (Spring Boot / Maven) ────────────────────────────────
 chatapp-backend/target/
 chatapp-backend/.mvn/

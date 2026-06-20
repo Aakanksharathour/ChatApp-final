@@ -70,7 +70,9 @@ export default function ChatListPage() {
     const token = getToken()
     if (!token) return
 
-    const ws = new WebSocket(`ws://localhost:8080/ws/chat?token=${token}`)
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+    const wsUrl  = apiUrl.replace(/^http/, 'ws')
+    const ws = new WebSocket(`${wsUrl}/ws/chat?token=${token}`)
     wsRef.current = ws
 
     ws.onmessage = (event) => {
